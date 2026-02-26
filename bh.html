@@ -3,48 +3,36 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Crypto Monitor V7 - Auto-Reconnect</title>
+    <title>Crypto Monitor V8 - Force Reconnect</title>
     <style>
         :root { --bg: #0d0d0d; --card: #1a1a1a; --border: #333; --accent: #4CAF50; --blue: #1976D2; --warn: #ffca28; }
         body { font-family: 'Segoe UI', Arial, sans-serif; background: var(--bg); color: #e0e0e0; margin: 0; padding: 20px; }
         .container { max-width: 1400px; margin: 0 auto; }
-        
         .vol-bar { background: var(--card); padding: 15px 25px; border-radius: 12px; border: 1px solid var(--border); margin-bottom: 15px; display: flex; align-items: center; gap: 15px; }
         .vol-bar span { font-family: monospace; color: var(--accent); font-weight: bold; min-width: 45px; }
-        #globalVol { flex-grow: 1; cursor: pointer; height: 8px; border-radius: 5px; accent-color: var(--accent); }
-
+        #globalVol { flex-grow: 1; cursor: pointer; accent-color: var(--accent); }
         .toolbar { display: flex; justify-content: space-between; align-items: center; background: var(--card); padding: 15px 25px; border-radius: 12px; border: 1px solid var(--border); margin-bottom: 25px; }
         .grid-layout { display: grid; grid-template-columns: repeat(auto-fill, minmax(340px, 1fr)); gap: 20px; }
-        
         .monitor-card { border: 1px solid var(--border); border-radius: 12px; padding: 18px; background: var(--card); position: relative; border-top: 4px solid var(--accent); }
         .card-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 15px; border-bottom: 1px solid #222; padding-bottom: 8px; }
         .remove-btn { background: #333; border: none; color: #ff5252; cursor: pointer; font-size: 11px; border-radius: 4px; padding: 4px 8px; }
-        
         .inputs { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-bottom: 15px; }
         .full-width { grid-column: span 2; }
-        
         label { font-size: 11px; color: #777; margin-bottom: 2px; display: block; }
         select, input { background: #252525; border: 1px solid #444; color: #fff; padding: 10px; border-radius: 6px; font-size: 13px; width: 100%; box-sizing: border-box; }
-        
-        button.action-btn { padding: 12px; background: var(--accent); color: white; border: none; border-radius: 6px; cursor: pointer; font-weight: bold; width: 100%; transition: 0.2s; }
+        button.action-btn { padding: 12px; background: var(--accent); color: white; border: none; border-radius: 6px; cursor: pointer; font-weight: bold; width: 100%; }
         button.stop { background: #d32f2f !important; }
         .add-main { background: var(--blue) !important; width: auto !important; padding: 10px 25px !important; }
-
         .price-box { text-align: center; font-size: 28px; margin: 15px 0; color: #ffca28; font-family: monospace; font-weight: bold; min-height: 35px; }
         .log-box { background: #000; padding: 12px; height: 160px; overflow-y: auto; border-radius: 8px; font-size: 11px; border: 1px solid #222; color: #aaa; font-family: 'Consolas', monospace; }
-        
         .buy-msg { color: #00e676; font-weight: bold; }
         .sell-msg { color: #ff5252; font-weight: bold; }
         .warn-msg { color: var(--warn); font-style: italic; }
-
-        #audio-hint { font-size: 10px; color: #ffca28; margin-bottom: 5px; text-align: center; display: none; }
     </style>
 </head>
 <body>
 
 <div class="container">
-    <div id="audio-hint">⚠️ 浏览器音频未激活，请点击页面任意处</div>
-    
     <div class="vol-bar">
         <span>🔈 <span id="volText">50</span>%</span>
         <input type="range" id="globalVol" min="0" max="100" value="50">
@@ -52,7 +40,7 @@
 
     <div class="toolbar">
         <div>
-            <h2 style="margin:0; color:var(--accent); font-size: 20px;">STABLE MONITOR V7</h2>
+            <h2 style="margin:0; color:var(--accent); font-size: 20px;">STABLE MONITOR V8</h2>
         </div>
         <button class="action-btn add-main" onclick="addNewMonitor()">+ 增加监控位</button>
     </div>
@@ -69,15 +57,20 @@
 
     function initAudio() {
         if (!audioCtx) audioCtx = new (window.AudioContext || window.webkitAudioContext)();
-        if (audioCtx.state === 'suspended') {
-            audioCtx.resume().then(() => {
-                document.getElementById('audio-hint').style.display = 'none';
-            });
-        }
+        if (audioCtx.state === 'suspended') audioCtx.resume();
     }
-
     window.addEventListener('mousedown', initAudio, { once: true });
-    window.addEventListener('keydown', initAudio, { once: true });
+
+    // --- 新增：监听系统网络恢复 ---
+    window.addEventListener('online', () => {
+        console.log("网络已恢复，强制重连所有活跃监控位...");
+        Object.keys(monitors).forEach(id => {
+            if (monitors[id].active) {
+                log(id, `<span class="warn-msg">检测到网络恢复，正在重启连接...</span>`);
+                run(id, true); // 强制重启
+            }
+        });
+    });
 
     async function getAudio(mId, side) {
         const audioIdx = ((mId - 1) % 4) + 1;
@@ -109,7 +102,6 @@
         const div = document.createElement('div');
         div.className = 'monitor-card';
         div.id = `m-card-${mId}`;
-        
         const type = conf.type || 'binance';
         const sym = conf.sym || (type === 'binance' ? 'BTCUSDT' : 'BTC');
         const mode = conf.mode || 'value';
@@ -137,7 +129,7 @@
             <div class="log-box" id="l-${mId}"></div>
         `;
         grid.appendChild(div);
-        monitors[mId] = { ws: null, active: false, timer: null };
+        monitors[mId] = { ws: null, active: false, timer: null, lastMsg: 0 };
     }
 
     function addNewMonitor(conf = null) {
@@ -150,7 +142,7 @@
 
     function kill(mId) {
         if (monitors[mId]) {
-            monitors[mId].active = false; // 先设为不活跃，防止 close 事件触发重连
+            monitors[mId].active = false;
             if (monitors[mId].ws) { monitors[mId].ws.onclose = null; monitors[mId].ws.close(); }
             clearTimeout(monitors[mId].timer);
             delete monitors[mId];
@@ -159,49 +151,52 @@
         save();
     }
 
-    async function run(mId) {
+    async function run(mId, isForce = false) {
         const m = monitors[mId];
         const btn = document.getElementById(`btn-${mId}`);
         if (!m) return;
 
-        // 如果已经在运行，执行停止逻辑
-        if (m.active) {
+        // 如果已经在运行且不是强制重连，则执行停止
+        if (m.active && !isForce) {
             m.active = false;
             if (m.ws) { m.ws.onclose = null; m.ws.close(); m.ws = null; }
             clearTimeout(m.timer);
-            m.timer = null;
             btn.innerText = "启动监控";
             btn.classList.remove('stop');
-            log(mId, "OFF | 已停止监控");
-        } else {
-            initAudio();
-            const sym = document.getElementById(`s-${mId}`).value.trim();
-            const thr = parseFloat(document.getElementById(`v-${mId}`).value);
-            const type = document.getElementById(`t-${mId}`).value;
-            const mode = document.getElementById(`m-${mId}`).value;
-            
-            await getAudio(mId, 'buy');
-            await getAudio(mId, 'sell');
+            log(mId, "OFF | 已停止");
+            return;
+        }
 
-            const url = type === 'binance' ? 
-                `wss://fstream.binance.com/ws/${sym.toLowerCase()}@aggTrade` : 
-                `wss://api.hyperliquid.xyz/ws`;
+        initAudio();
+        const sym = document.getElementById(`s-${mId}`).value.trim();
+        const thr = parseFloat(document.getElementById(`v-${mId}`).value);
+        const type = document.getElementById(`t-${mId}`).value;
+        const mode = document.getElementById(`m-${mId}`).value;
+        
+        await getAudio(mId, 'buy');
+        await getAudio(mId, 'sell');
 
-            // 清理可能存在的旧连接
-            if (m.ws) { m.ws.onclose = null; m.ws.close(); }
-            clearTimeout(m.timer);
+        // 清理旧连接
+        if (m.ws) { m.ws.onclose = null; m.ws.close(); }
+        clearTimeout(m.timer);
 
+        const url = type === 'binance' ? 
+            `wss://fstream.binance.com/ws/${sym.toLowerCase()}@aggTrade` : 
+            `wss://api.hyperliquid.xyz/ws`;
+
+        try {
             m.ws = new WebSocket(url);
-            
+            m.active = true;
+            btn.innerText = "停止监控";
+            btn.classList.add('stop');
+
             m.ws.onopen = () => {
-                m.active = true;
-                btn.innerText = "停止监控";
-                btn.classList.add('stop');
-                log(mId, `<span style="color:#4CAF50">ON | 监控中: ${sym}</span>`);
+                log(mId, `<span style="color:#4CAF50">ON | 正在监控: ${sym}</span>`);
                 if (type === 'hl') m.ws.send(JSON.stringify({"method":"subscribe","subscription":{"type":"trades","coin":sym}}));
             };
 
             m.ws.onmessage = (e) => {
+                m.lastMsg = Date.now(); // 更新最后一次收到消息的时间
                 const d = JSON.parse(e.data);
                 let price, qty, buy, hit = false;
                 if (type === 'binance' && d.p) {
@@ -224,20 +219,35 @@
                 }
             };
 
-            // 核心重连逻辑
             m.ws.onclose = () => {
                 if (m.active) {
-                    log(mId, `<span class="warn-msg">连接断开，2秒后尝试重连...</span>`);
-                    m.timer = setTimeout(() => run(mId), 2000); // 间隔2秒重连
+                    log(mId, `<span class="warn-msg">断开, 2秒后自动重连...</span>`);
+                    m.timer = setTimeout(() => run(mId, true), 2000);
                 }
             };
 
-            m.ws.onerror = (err) => {
-                console.error(`Monitor ${mId} Error:`, err);
-                m.ws.close(); // 触发 onclose 进行重连
-            };
+            m.ws.onerror = () => { if(m.ws) m.ws.close(); };
+
+        } catch (err) {
+            if (m.active) m.timer = setTimeout(() => run(mId, true), 2000);
         }
     }
+
+    // 新增：全局心跳检查器，每15秒检查一次是否有监控位“假死”
+    setInterval(() => {
+        const now = Date.now();
+        Object.keys(monitors).forEach(id => {
+            const m = monitors[id];
+            // 如果处于活跃状态超过30秒没有收到任何WebSocket消息(lastMsg)，强制重启
+            // 注意：只有在启动后才会设置 lastMsg
+            if (m.active && m.ws && m.ws.readyState === WebSocket.OPEN && m.lastMsg > 0) {
+                if (now - m.lastMsg > 30000) { 
+                    log(id, `<span class="warn-msg">连接假死，正在强制拉起...</span>`);
+                    run(id, true);
+                }
+            }
+        });
+    }, 15000);
 
     function log(mId, msg) {
         const box = document.getElementById(`l-${mId}`);
@@ -254,16 +264,16 @@
                   t = document.getElementById(`t-${id}`), m = document.getElementById(`m-${id}`);
             if(s && v && t && m) data.push({ type: t.value, sym: s.value, thr: v.value, mode: m.value });
         });
-        localStorage.setItem('monitor_data_v7', JSON.stringify(data));
+        localStorage.setItem('monitor_data_v8', JSON.stringify(data));
     }
 
     window.onload = () => {
         try {
-            const vol = localStorage.getItem('global_v_v7') || 50;
+            const vol = localStorage.getItem('global_v_v8') || 50;
             document.getElementById('globalVol').value = vol;
             document.getElementById('volText').innerText = vol;
             volume = vol / 100;
-            const saved = JSON.parse(localStorage.getItem('monitor_data_v7'));
+            const saved = JSON.parse(localStorage.getItem('monitor_data_v8'));
             if (Array.isArray(saved) && saved.length > 0) {
                 saved.forEach(c => { if(c) addNewMonitor(c); });
             } else { addNewMonitor(); }
@@ -273,7 +283,7 @@
     document.getElementById('globalVol').oninput = function() {
         volume = this.value / 100;
         document.getElementById('volText').innerText = this.value;
-        localStorage.setItem('global_v_v7', this.value);
+        localStorage.setItem('global_v_v8', this.value);
     };
 </script>
 </body>
