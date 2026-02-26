@@ -3,38 +3,57 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Crypto Monitor V4 - Stability Fix</title>
+    <title>Crypto Monitor V5 - Dual Mode</title>
     <style>
-        :root { --bg: #0d0d0d; --card: #1a1a1a; --border: #333; --accent: #4CAF50; }
+        :root { --bg: #0d0d0d; --card: #1a1a1a; --border: #333; --accent: #4CAF50; --blue: #1976D2; }
         body { font-family: 'Segoe UI', Arial, sans-serif; background: var(--bg); color: #e0e0e0; margin: 0; padding: 20px; }
         .container { max-width: 1400px; margin: 0 auto; }
+        
+        /* 独立音量控制条 */
+        .vol-bar { background: var(--card); padding: 15px 25px; border-radius: 12px; border: 1px solid var(--border); margin-bottom: 15px; display: flex; align-items: center; gap: 20px; }
+        .vol-bar label { font-weight: bold; color: var(--accent); min-width: 100px; }
+        #globalVol { flex-grow: 1; cursor: pointer; }
+
         .toolbar { display: flex; justify-content: space-between; align-items: center; background: var(--card); padding: 15px 25px; border-radius: 12px; border: 1px solid var(--border); margin-bottom: 25px; }
-        .grid-layout { display: grid; grid-template-columns: repeat(auto-fill, minmax(320px, 1fr)); gap: 20px; }
-        .monitor-card { border: 1px solid var(--border); border-radius: 12px; padding: 18px; background: var(--card); position: relative; border-top: 4px solid var(--accent); }
+        .grid-layout { display: grid; grid-template-columns: repeat(auto-fill, minmax(340px, 1fr)); gap: 20px; }
+        
+        .monitor-card { border: 1px solid var(--border); border-radius: 12px; padding: 18px; background: var(--card); position: relative; border-top: 4px solid var(--accent); transition: 0.3s; }
         .card-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 15px; border-bottom: 1px solid #222; padding-bottom: 8px; }
-        .remove-btn { background: #444; border: none; color: #ff5252; cursor: pointer; font-size: 12px; border-radius: 4px; padding: 4px 10px; }
+        .remove-btn { background: #333; border: none; color: #ff5252; cursor: pointer; font-size: 12px; border-radius: 4px; padding: 4px 10px; }
+        
         .inputs { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-bottom: 15px; }
         .full-width { grid-column: span 2; }
+        
+        label { font-size: 11px; color: #777; margin-bottom: 2px; display: block; }
         select, input { background: #252525; border: 1px solid #444; color: #fff; padding: 10px; border-radius: 6px; font-size: 13px; width: 100%; box-sizing: border-box; }
-        button.action-btn { padding: 12px; background: var(--accent); color: white; border: none; border-radius: 6px; cursor: pointer; font-weight: bold; width: 100%; }
+        
+        button.action-btn { padding: 12px; background: var(--accent); color: white; border: none; border-radius: 6px; cursor: pointer; font-weight: bold; width: 100%; transition: 0.2s; }
         button.stop { background: #d32f2f !important; }
-        .price-box { text-align: center; font-size: 28px; margin: 15px 0; color: #ffca28; font-family: monospace; font-weight: bold; min-height: 35px; }
-        .log-box { background: #000; padding: 12px; height: 150px; overflow-y: auto; border-radius: 8px; font-size: 11px; border: 1px solid #222; color: #aaa; }
-        .buy-msg { color: #00e676; }
-        .sell-msg { color: #ff5252; }
-        .add-main { background: #1976D2 !important; width: auto !important; }
+        .add-main { background: var(--blue) !important; width: auto !important; padding: 10px 25px !important; }
+
+        .price-box { text-align: center; font-size: 28px; margin: 15px 0; color: #ffca28; font-family: monospace; font-weight: bold; min-height: 35px; text-shadow: 0 0 10px rgba(255,202,40,0.2); }
+        .log-box { background: #000; padding: 12px; height: 160px; overflow-y: auto; border-radius: 8px; font-size: 11px; border: 1px solid #222; color: #aaa; font-family: 'Consolas', monospace; }
+        
+        .buy-msg { color: #00e676; font-weight: bold; }
+        .sell-msg { color: #ff5252; font-weight: bold; }
     </style>
 </head>
 <body>
 
 <div class="container">
-    <div class="toolbar">
-        <h2 style="margin:0; color:var(--accent);">CRYPTO MONITOR V4</h2>
-        <div style="display:flex; align-items:center; gap:25px;">
-            <div style="font-size:14px;">音量: <input type="range" id="globalVol" min="0" max="100" value="50"></div>
-            <button class="action-btn add-main" onclick="addNewMonitor()">+ 增加监控位</button>
-        </div>
+    <div class="vol-bar">
+        <label>🔈 全局音量: <span id="volText">50</span>%</label>
+        <input type="range" id="globalVol" min="0" max="100" value="50">
     </div>
+
+    <div class="toolbar">
+        <div>
+            <h2 style="margin:0; color:var(--accent); font-size: 20px;">CRYPTO DUAL-MODE MONITOR</h2>
+            <p style="margin:5px 0 0 0; font-size: 12px; color: #777;">支持 成交额($) / 成交量(Qty) 双模式</p>
+        </div>
+        <button class="action-btn add-main" onclick="addNewMonitor()">+ 增加监控位</button>
+    </div>
+
     <div class="grid-layout" id="monitorGrid"></div>
 </div>
 
@@ -74,19 +93,15 @@
         s.start(0);
     }
 
-    // --- 修复核心：增加防御性检查 ---
-    function createUI(mId, conf) {
-        // 如果 conf 是 null 或 undefined，强制初始化为对象
-        if (!conf) conf = {}; 
-        
+    function createUI(mId, conf = {}) {
         const grid = document.getElementById('monitorGrid');
         const div = document.createElement('div');
         div.className = 'monitor-card';
         div.id = `m-card-${mId}`;
         
-        // 每一个属性读取都增加默认值兜底
         const type = conf.type || 'binance';
         const sym = conf.sym || (type === 'binance' ? 'BTCUSDT' : 'BTC');
+        const mode = conf.mode || 'value'; // value 或 volume
         const thr = conf.thr || 50000;
 
         div.innerHTML = `
@@ -95,15 +110,29 @@
                 <button class="remove-btn" onclick="kill(${mId})">移除</button>
             </div>
             <div class="inputs">
-                <select id="t-${mId}" onchange="save()">
-                    <option value="binance" ${type==='binance'?'selected':''}>Binance</option>
-                    <option value="hl" ${type==='hl'?'selected':''}>Hyperliquid</option>
-                </select>
-                <input type="text" id="s-${mId}" value="${sym}" placeholder="币种" onchange="save()">
-                <div class="input-group full-width">
-                    <input type="number" id="v-${mId}" value="${thr}" placeholder="阈值 ($)" onchange="save()">
+                <div>
+                    <label>交易所</label>
+                    <select id="t-${mId}" onchange="save()">
+                        <option value="binance" ${type==='binance'?'selected':''}>Binance</option>
+                        <option value="hl" ${type==='hl'?'selected':''}>Hyperliquid</option>
+                    </select>
                 </div>
-                <button id="btn-${mId}" class="action-btn" onclick="run(${mId})">启动监控</button>
+                <div>
+                    <label>交易对</label>
+                    <input type="text" id="s-${mId}" value="${sym}" onchange="save()">
+                </div>
+                <div>
+                    <label>监控模式</label>
+                    <select id="m-${mId}" onchange="save()">
+                        <option value="value" ${mode==='value'?'selected':''}>按成交额 ($)</option>
+                        <option value="volume" ${mode==='volume'?'selected':''}>按成交量 (Qty)</option>
+                    </select>
+                </div>
+                <div>
+                    <label>触发阈值</label>
+                    <input type="number" id="v-${mId}" value="${thr}" onchange="save()">
+                </div>
+                <button id="btn-${mId}" class="action-btn full-width" onclick="run(${mId})">启动监控</button>
             </div>
             <div class="price-box" id="p-${mId}">---</div>
             <div class="log-box" id="l-${mId}"></div>
@@ -115,12 +144,8 @@
     function addNewMonitor(conf = null) {
         monitorCount++;
         const id = monitorCount;
-        // 即使 addNewMonitor() 被无参调用，conf 也是 null，createUI 会处理它
-        createUI(id, conf);
-        if (conf) {
-            // 延迟一点启动，防止并发 WebSocket 连太多
-            setTimeout(() => run(id), id * 200); 
-        }
+        createUI(id, conf || {});
+        if (conf) setTimeout(() => run(id), id * 150);
         save();
     }
 
@@ -130,8 +155,7 @@
             if (monitors[mId].timer) clearTimeout(monitors[mId].timer);
             delete monitors[mId];
         }
-        const el = document.getElementById(`m-card-${mId}`);
-        if (el) el.remove();
+        document.getElementById(`m-card-${mId}`)?.remove();
         save();
     }
 
@@ -143,7 +167,7 @@
         if (m.active) {
             m.active = false;
             if (m.ws) { m.ws.onclose = null; m.ws.close(); m.ws = null; }
-            if (m.timer) { clearTimeout(m.timer); m.timer = null; }
+            clearTimeout(m.timer);
             btn.innerText = "启动监控";
             btn.classList.remove('stop');
             log(mId, "OFF | 停止");
@@ -152,6 +176,7 @@
             const sym = document.getElementById(`s-${mId}`).value.trim();
             const thr = parseFloat(document.getElementById(`v-${mId}`).value);
             const type = document.getElementById(`t-${mId}`).value;
+            const mode = document.getElementById(`m-${mId}`).value;
             
             await getAudio(mId, 'buy');
             await getAudio(mId, 'sell');
@@ -165,26 +190,31 @@
                 m.active = true;
                 btn.innerText = "停止监控";
                 btn.classList.add('stop');
-                log(mId, `ON | 正在监控 ${sym}`);
+                log(mId, `ON | 正在监控 ${sym} (${mode === 'value' ? '$' : 'Qty'})`);
                 if (type === 'hl') m.ws.send(JSON.stringify({"method":"subscribe","subscription":{"type":"trades","coin":sym}}));
             };
 
             m.ws.onmessage = (e) => {
                 const d = JSON.parse(e.data);
-                let price, val, buy, hit = false;
+                let price, qty, buy, hit = false;
+
                 if (type === 'binance' && d.p) {
-                    price = parseFloat(d.p); val = price * parseFloat(d.q); buy = !d.m; hit = true;
+                    price = parseFloat(d.p); qty = parseFloat(d.q); buy = !d.m; hit = true;
                 } else if (d.channel === "trades" && d.data) {
                     d.data.forEach(t => {
                         if (t.coin === sym || t.coin === `xyz:${sym}`) {
-                            price = parseFloat(t.px); val = price * parseFloat(t.sz); buy = t.side === 'B'; hit = true;
+                            price = parseFloat(t.px); qty = parseFloat(t.sz); buy = t.side === 'B'; hit = true;
                         }
                     });
                 }
+
                 if (hit) {
                     document.getElementById(`p-${mId}`).innerText = price > 1 ? price.toLocaleString() : price.toFixed(4);
-                    if (val >= thr) {
-                        log(mId, `<span class="${buy?'buy-msg':'sell-msg'}">${buy?'BUY':'SELL'} $${Math.floor(val).toLocaleString()}</span>`);
+                    // 核心逻辑判断
+                    const currentVal = mode === 'value' ? (price * qty) : qty;
+                    if (currentVal >= thr) {
+                        const displayVal = mode === 'value' ? `$${Math.floor(currentVal).toLocaleString()}` : `${qty.toFixed(2)} Qty`;
+                        log(mId, `<span class="${buy?'buy-msg':'sell-msg'}">${buy?'BUY':'SELL'} ${displayVal}</span>`);
                         play(mId, buy ? 'buy' : 'sell');
                     }
                 }
@@ -198,41 +228,42 @@
         if(!box) return;
         const t = new Date().toLocaleTimeString([], {hour12:false});
         box.innerHTML = `<div>[${t}] ${msg}</div>` + box.innerHTML;
-        if (box.childNodes.length > 30) box.removeChild(box.lastChild);
+        if (box.childNodes.length > 35) box.removeChild(box.lastChild);
     }
 
     function save() {
         const data = [];
         Object.keys(monitors).forEach(id => {
-            const s = document.getElementById(`s-${id}`), v = document.getElementById(`v-${id}`), t = document.getElementById(`t-${id}`);
-            if(s && v && t) data.push({ type: t.value, sym: s.value, thr: v.value });
+            const s = document.getElementById(`s-${id}`), v = document.getElementById(`v-${id}`), 
+                  t = document.getElementById(`t-${id}`), m = document.getElementById(`m-${id}`);
+            if(s && v && t && m) data.push({ type: t.value, sym: s.value, thr: v.value, mode: m.value });
         });
-        localStorage.setItem('monitor_data_v4', JSON.stringify(data));
+        localStorage.setItem('monitor_data_v5', JSON.stringify(data));
     }
 
     window.onload = () => {
         try {
-            const vol = localStorage.getItem('global_v_v4') || 50;
+            const vol = localStorage.getItem('global_v_v5') || 50;
             document.getElementById('globalVol').value = vol;
+            document.getElementById('volText').innerText = vol;
             volume = vol / 100;
 
-            const saved = JSON.parse(localStorage.getItem('monitor_data_v4'));
+            const saved = JSON.parse(localStorage.getItem('monitor_data_v5'));
             if (Array.isArray(saved) && saved.length > 0) {
-                // 只有当数组里确实有非空数据时才循环
                 saved.forEach(c => { if(c) addNewMonitor(c); });
             } else {
                 addNewMonitor(); 
             }
         } catch (e) {
-            console.warn("清理损坏缓存", e);
-            localStorage.removeItem('monitor_data_v4');
+            localStorage.removeItem('monitor_data_v5');
             addNewMonitor();
         }
     };
 
     document.getElementById('globalVol').oninput = function() {
         volume = this.value / 100;
-        localStorage.setItem('global_v_v4', this.value);
+        document.getElementById('volText').innerText = this.value;
+        localStorage.setItem('global_v_v5', this.value);
     };
 </script>
 </body>
