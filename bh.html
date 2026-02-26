@@ -3,23 +3,23 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Crypto Monitor V5 - Dual Mode</title>
+    <title>Crypto Monitor V6 - Auto-Active</title>
     <style>
         :root { --bg: #0d0d0d; --card: #1a1a1a; --border: #333; --accent: #4CAF50; --blue: #1976D2; }
         body { font-family: 'Segoe UI', Arial, sans-serif; background: var(--bg); color: #e0e0e0; margin: 0; padding: 20px; }
         .container { max-width: 1400px; margin: 0 auto; }
         
-        /* 独立音量控制条 */
-        .vol-bar { background: var(--card); padding: 15px 25px; border-radius: 12px; border: 1px solid var(--border); margin-bottom: 15px; display: flex; align-items: center; gap: 20px; }
-        .vol-bar label { font-weight: bold; color: var(--accent); min-width: 100px; }
-        #globalVol { flex-grow: 1; cursor: pointer; }
+        /* 独立音量控制条 - 去掉文字 */
+        .vol-bar { background: var(--card); padding: 15px 25px; border-radius: 12px; border: 1px solid var(--border); margin-bottom: 15px; display: flex; align-items: center; gap: 15px; }
+        .vol-bar span { font-family: monospace; color: var(--accent); font-weight: bold; min-width: 45px; }
+        #globalVol { flex-grow: 1; cursor: pointer; height: 8px; border-radius: 5px; accent-color: var(--accent); }
 
         .toolbar { display: flex; justify-content: space-between; align-items: center; background: var(--card); padding: 15px 25px; border-radius: 12px; border: 1px solid var(--border); margin-bottom: 25px; }
         .grid-layout { display: grid; grid-template-columns: repeat(auto-fill, minmax(340px, 1fr)); gap: 20px; }
         
-        .monitor-card { border: 1px solid var(--border); border-radius: 12px; padding: 18px; background: var(--card); position: relative; border-top: 4px solid var(--accent); transition: 0.3s; }
+        .monitor-card { border: 1px solid var(--border); border-radius: 12px; padding: 18px; background: var(--card); position: relative; border-top: 4px solid var(--accent); }
         .card-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 15px; border-bottom: 1px solid #222; padding-bottom: 8px; }
-        .remove-btn { background: #333; border: none; color: #ff5252; cursor: pointer; font-size: 12px; border-radius: 4px; padding: 4px 10px; }
+        .remove-btn { background: #333; border: none; color: #ff5252; cursor: pointer; font-size: 11px; border-radius: 4px; padding: 4px 8px; }
         
         .inputs { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-bottom: 15px; }
         .full-width { grid-column: span 2; }
@@ -31,25 +31,29 @@
         button.stop { background: #d32f2f !important; }
         .add-main { background: var(--blue) !important; width: auto !important; padding: 10px 25px !important; }
 
-        .price-box { text-align: center; font-size: 28px; margin: 15px 0; color: #ffca28; font-family: monospace; font-weight: bold; min-height: 35px; text-shadow: 0 0 10px rgba(255,202,40,0.2); }
+        .price-box { text-align: center; font-size: 28px; margin: 15px 0; color: #ffca28; font-family: monospace; font-weight: bold; min-height: 35px; }
         .log-box { background: #000; padding: 12px; height: 160px; overflow-y: auto; border-radius: 8px; font-size: 11px; border: 1px solid #222; color: #aaa; font-family: 'Consolas', monospace; }
         
         .buy-msg { color: #00e676; font-weight: bold; }
         .sell-msg { color: #ff5252; font-weight: bold; }
+
+        /* 自动激活提示 */
+        #audio-hint { font-size: 10px; color: #ffca28; margin-bottom: 5px; text-align: center; display: none; }
     </style>
 </head>
 <body>
 
 <div class="container">
+    <div id="audio-hint">⚠️ 浏览器已静音，请点击页面任意位置激活声音</div>
+    
     <div class="vol-bar">
-        <label>🔈 全局音量: <span id="volText">50</span>%</label>
+        <span>🔈 <span id="volText">50</span>%</span>
         <input type="range" id="globalVol" min="0" max="100" value="50">
     </div>
 
     <div class="toolbar">
         <div>
-            <h2 style="margin:0; color:var(--accent); font-size: 20px;">CRYPTO DUAL-MODE MONITOR</h2>
-            <p style="margin:5px 0 0 0; font-size: 12px; color: #777;">支持 成交额($) / 成交量(Qty) 双模式</p>
+            <h2 style="margin:0; color:var(--accent); font-size: 20px;">CRYPTO MONITOR PRO</h2>
         </div>
         <button class="action-btn add-main" onclick="addNewMonitor()">+ 增加监控位</button>
     </div>
@@ -64,27 +68,44 @@
     const buffers = {};
     const monitors = {};
 
-    function resumeAudio() {
-        if (!audioCtx) audioCtx = new (window.AudioContext || window.webkitAudioContext)();
-        if (audioCtx.state === 'suspended') audioCtx.resume();
+    // 核心优化：全域点击激活音频
+    function initAudio() {
+        if (!audioCtx) {
+            audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+        }
+        if (audioCtx.state === 'suspended') {
+            audioCtx.resume().then(() => {
+                document.getElementById('audio-hint').style.display = 'none';
+                console.log("音频系统已激活");
+            });
+        }
     }
 
+    // 监听全屏任何交互
+    window.addEventListener('mousedown', initAudio, { once: true });
+    window.addEventListener('touchstart', initAudio, { once: true });
+    window.addEventListener('keydown', initAudio, { once: true });
+
     async function getAudio(mId, side) {
-        resumeAudio();
         const audioIdx = ((mId - 1) % 4) + 1;
         const key = `${mId}_${side}`;
         if (buffers[key]) return buffers[key];
         try {
             const res = await fetch(`https://raw.githubusercontent.com/dbr4fr/source/main/${audioIdx}_${side}.mp3`);
             const data = await res.arrayBuffer();
+            if (!audioCtx) initAudio();
             buffers[key] = await audioCtx.decodeAudioData(data);
             return buffers[key];
         } catch (e) { return null; }
     }
 
     function play(mId, side) {
+        if (!audioCtx || audioCtx.state !== 'running') {
+            document.getElementById('audio-hint').style.display = 'block';
+            return;
+        }
         const b = buffers[`${mId}_${side}`];
-        if (!b || !audioCtx) return;
+        if (!b) return;
         const s = audioCtx.createBufferSource();
         const g = audioCtx.createGain();
         s.buffer = b;
@@ -101,7 +122,7 @@
         
         const type = conf.type || 'binance';
         const sym = conf.sym || (type === 'binance' ? 'BTCUSDT' : 'BTC');
-        const mode = conf.mode || 'value'; // value 或 volume
+        const mode = conf.mode || 'value';
         const thr = conf.thr || 50000;
 
         div.innerHTML = `
@@ -122,14 +143,14 @@
                     <input type="text" id="s-${mId}" value="${sym}" onchange="save()">
                 </div>
                 <div>
-                    <label>监控模式</label>
+                    <label>模式</label>
                     <select id="m-${mId}" onchange="save()">
-                        <option value="value" ${mode==='value'?'selected':''}>按成交额 ($)</option>
-                        <option value="volume" ${mode==='volume'?'selected':''}>按成交量 (Qty)</option>
+                        <option value="value" ${mode==='value'?'selected':''}>成交额 ($)</option>
+                        <option value="volume" ${mode==='volume'?'selected':''}>成交量 (Qty)</option>
                     </select>
                 </div>
                 <div>
-                    <label>触发阈值</label>
+                    <label>阈值</label>
                     <input type="number" id="v-${mId}" value="${thr}" onchange="save()">
                 </div>
                 <button id="btn-${mId}" class="action-btn full-width" onclick="run(${mId})">启动监控</button>
@@ -145,14 +166,14 @@
         monitorCount++;
         const id = monitorCount;
         createUI(id, conf || {});
-        if (conf) setTimeout(() => run(id), id * 150);
+        if (conf) setTimeout(() => run(id), id * 100);
         save();
     }
 
     function kill(mId) {
         if (monitors[mId]) {
             if (monitors[mId].ws) { monitors[mId].ws.onclose = null; monitors[mId].ws.close(); }
-            if (monitors[mId].timer) clearTimeout(monitors[mId].timer);
+            clearTimeout(monitors[mId].timer);
             delete monitors[mId];
         }
         document.getElementById(`m-card-${mId}`)?.remove();
@@ -172,7 +193,7 @@
             btn.classList.remove('stop');
             log(mId, "OFF | 停止");
         } else {
-            resumeAudio();
+            initAudio(); // 启动时再次尝试激活音频
             const sym = document.getElementById(`s-${mId}`).value.trim();
             const thr = parseFloat(document.getElementById(`v-${mId}`).value);
             const type = document.getElementById(`t-${mId}`).value;
@@ -190,14 +211,13 @@
                 m.active = true;
                 btn.innerText = "停止监控";
                 btn.classList.add('stop');
-                log(mId, `ON | 正在监控 ${sym} (${mode === 'value' ? '$' : 'Qty'})`);
+                log(mId, `ON | 监控中 ${sym}`);
                 if (type === 'hl') m.ws.send(JSON.stringify({"method":"subscribe","subscription":{"type":"trades","coin":sym}}));
             };
 
             m.ws.onmessage = (e) => {
                 const d = JSON.parse(e.data);
                 let price, qty, buy, hit = false;
-
                 if (type === 'binance' && d.p) {
                     price = parseFloat(d.p); qty = parseFloat(d.q); buy = !d.m; hit = true;
                 } else if (d.channel === "trades" && d.data) {
@@ -207,10 +227,8 @@
                         }
                     });
                 }
-
                 if (hit) {
                     document.getElementById(`p-${mId}`).innerText = price > 1 ? price.toLocaleString() : price.toFixed(4);
-                    // 核心逻辑判断
                     const currentVal = mode === 'value' ? (price * qty) : qty;
                     if (currentVal >= thr) {
                         const displayVal = mode === 'value' ? `$${Math.floor(currentVal).toLocaleString()}` : `${qty.toFixed(2)} Qty`;
@@ -228,7 +246,7 @@
         if(!box) return;
         const t = new Date().toLocaleTimeString([], {hour12:false});
         box.innerHTML = `<div>[${t}] ${msg}</div>` + box.innerHTML;
-        if (box.childNodes.length > 35) box.removeChild(box.lastChild);
+        if (box.childNodes.length > 30) box.removeChild(box.lastChild);
     }
 
     function save() {
@@ -238,32 +256,26 @@
                   t = document.getElementById(`t-${id}`), m = document.getElementById(`m-${id}`);
             if(s && v && t && m) data.push({ type: t.value, sym: s.value, thr: v.value, mode: m.value });
         });
-        localStorage.setItem('monitor_data_v5', JSON.stringify(data));
+        localStorage.setItem('monitor_data_v6', JSON.stringify(data));
     }
 
     window.onload = () => {
         try {
-            const vol = localStorage.getItem('global_v_v5') || 50;
+            const vol = localStorage.getItem('global_v_v6') || 50;
             document.getElementById('globalVol').value = vol;
             document.getElementById('volText').innerText = vol;
             volume = vol / 100;
-
-            const saved = JSON.parse(localStorage.getItem('monitor_data_v5'));
+            const saved = JSON.parse(localStorage.getItem('monitor_data_v6'));
             if (Array.isArray(saved) && saved.length > 0) {
                 saved.forEach(c => { if(c) addNewMonitor(c); });
-            } else {
-                addNewMonitor(); 
-            }
-        } catch (e) {
-            localStorage.removeItem('monitor_data_v5');
-            addNewMonitor();
-        }
+            } else { addNewMonitor(); }
+        } catch (e) { addNewMonitor(); }
     };
 
     document.getElementById('globalVol').oninput = function() {
         volume = this.value / 100;
         document.getElementById('volText').innerText = this.value;
-        localStorage.setItem('global_v_v5', this.value);
+        localStorage.setItem('global_v_v6', this.value);
     };
 </script>
 </body>
