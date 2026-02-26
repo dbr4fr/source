@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Crypto Monitor V8 - Force Reconnect</title>
+    <title>Crypto Monitor V9 - Price Detail</title>
     <style>
         :root { --bg: #0d0d0d; --card: #1a1a1a; --border: #333; --accent: #4CAF50; --blue: #1976D2; --warn: #ffca28; }
         body { font-family: 'Segoe UI', Arial, sans-serif; background: var(--bg); color: #e0e0e0; margin: 0; padding: 20px; }
@@ -17,16 +17,18 @@
         .card-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 15px; border-bottom: 1px solid #222; padding-bottom: 8px; }
         .remove-btn { background: #333; border: none; color: #ff5252; cursor: pointer; font-size: 11px; border-radius: 4px; padding: 4px 8px; }
         .inputs { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-bottom: 15px; }
-        .full-width { grid-column: span 2; }
         label { font-size: 11px; color: #777; margin-bottom: 2px; display: block; }
         select, input { background: #252525; border: 1px solid #444; color: #fff; padding: 10px; border-radius: 6px; font-size: 13px; width: 100%; box-sizing: border-box; }
         button.action-btn { padding: 12px; background: var(--accent); color: white; border: none; border-radius: 6px; cursor: pointer; font-weight: bold; width: 100%; }
         button.stop { background: #d32f2f !important; }
         .add-main { background: var(--blue) !important; width: auto !important; padding: 10px 25px !important; }
         .price-box { text-align: center; font-size: 28px; margin: 15px 0; color: #ffca28; font-family: monospace; font-weight: bold; min-height: 35px; }
-        .log-box { background: #000; padding: 12px; height: 160px; overflow-y: auto; border-radius: 8px; font-size: 11px; border: 1px solid #222; color: #aaa; font-family: 'Consolas', monospace; }
+        .log-box { background: #000; padding: 12px; height: 180px; overflow-y: auto; border-radius: 8px; font-size: 11px; border: 1px solid #222; color: #aaa; font-family: 'Consolas', 'Courier New', monospace; }
+        
+        /* 日志颜色优化 */
         .buy-msg { color: #00e676; font-weight: bold; }
         .sell-msg { color: #ff5252; font-weight: bold; }
+        .price-tag { color: #fff; font-weight: normal; opacity: 0.9; }
         .warn-msg { color: var(--warn); font-style: italic; }
     </style>
 </head>
@@ -40,7 +42,7 @@
 
     <div class="toolbar">
         <div>
-            <h2 style="margin:0; color:var(--accent); font-size: 20px;">STABLE MONITOR V8</h2>
+            <h2 style="margin:0; color:var(--accent); font-size: 20px;">STABLE MONITOR V9</h2>
         </div>
         <button class="action-btn add-main" onclick="addNewMonitor()">+ 增加监控位</button>
     </div>
@@ -61,13 +63,10 @@
     }
     window.addEventListener('mousedown', initAudio, { once: true });
 
-    // --- 新增：监听系统网络恢复 ---
     window.addEventListener('online', () => {
-        console.log("网络已恢复，强制重连所有活跃监控位...");
-        Object.keys(monitors).forEach(id => {
+        Object.keys(monitors).forEach((id, index) => {
             if (monitors[id].active) {
-                log(id, `<span class="warn-msg">检测到网络恢复，正在重启连接...</span>`);
-                run(id, true); // 强制重启
+                setTimeout(() => run(id, true), index * 200);
             }
         });
     });
@@ -123,7 +122,7 @@
                     <option value="volume" ${mode==='volume'?'selected':''}>成交量 (Qty)</option>
                 </select></div>
                 <div><label>阈值</label><input type="number" id="v-${mId}" value="${thr}" onchange="save()"></div>
-                <button id="btn-${mId}" class="action-btn full-width" onclick="run(${mId})">启动监控</button>
+                <button id="btn-${mId}" class="action-btn" style="grid-column: span 2;" onclick="run(${mId})">启动监控</button>
             </div>
             <div class="price-box" id="p-${mId}">---</div>
             <div class="log-box" id="l-${mId}"></div>
@@ -156,7 +155,6 @@
         const btn = document.getElementById(`btn-${mId}`);
         if (!m) return;
 
-        // 如果已经在运行且不是强制重连，则执行停止
         if (m.active && !isForce) {
             m.active = false;
             if (m.ws) { m.ws.onclose = null; m.ws.close(); m.ws = null; }
@@ -176,7 +174,6 @@
         await getAudio(mId, 'buy');
         await getAudio(mId, 'sell');
 
-        // 清理旧连接
         if (m.ws) { m.ws.onclose = null; m.ws.close(); }
         clearTimeout(m.timer);
 
@@ -196,7 +193,7 @@
             };
 
             m.ws.onmessage = (e) => {
-                m.lastMsg = Date.now(); // 更新最后一次收到消息的时间
+                m.lastMsg = Date.now();
                 const d = JSON.parse(e.data);
                 let price, qty, buy, hit = false;
                 if (type === 'binance' && d.p) {
@@ -209,52 +206,30 @@
                     });
                 }
                 if (hit) {
-                    document.getElementById(`p-${mId}`).innerText = price > 1 ? price.toLocaleString() : price.toFixed(4);
+                    const priceStr = price > 1 ? price.toLocaleString() : price.toFixed(4);
+                    document.getElementById(`p-${mId}`).innerText = priceStr;
+                    
                     const currentVal = mode === 'value' ? (price * qty) : qty;
                     if (currentVal >= thr) {
                         const displayVal = mode === 'value' ? `$${Math.floor(currentVal).toLocaleString()}` : `${qty.toFixed(2)} Qty`;
-                        log(mId, `<span class="${buy?'buy-msg':'sell-msg'}">${buy?'BUY':'SELL'} ${displayVal}</span>`);
+                        // --- 核心修改：日志显示格式 ---
+                        const logContent = `<span class="${buy?'buy-msg':'sell-msg'}">${buy?'BUY':'SELL'} ${displayVal}</span> <span class="price-tag">@${priceStr}</span>`;
+                        log(mId, logContent);
                         play(mId, buy ? 'buy' : 'sell');
                     }
                 }
             };
-
-            m.ws.onclose = () => {
-                if (m.active) {
-                    log(mId, `<span class="warn-msg">断开, 2秒后自动重连...</span>`);
-                    m.timer = setTimeout(() => run(mId, true), 2000);
-                }
-            };
-
+            m.ws.onclose = () => { if (m.active) m.timer = setTimeout(() => run(mId, true), 2000); };
             m.ws.onerror = () => { if(m.ws) m.ws.close(); };
-
-        } catch (err) {
-            if (m.active) m.timer = setTimeout(() => run(mId, true), 2000);
-        }
+        } catch (err) { if (m.active) m.timer = setTimeout(() => run(mId, true), 2000); }
     }
-
-    // 新增：全局心跳检查器，每15秒检查一次是否有监控位“假死”
-    setInterval(() => {
-        const now = Date.now();
-        Object.keys(monitors).forEach(id => {
-            const m = monitors[id];
-            // 如果处于活跃状态超过30秒没有收到任何WebSocket消息(lastMsg)，强制重启
-            // 注意：只有在启动后才会设置 lastMsg
-            if (m.active && m.ws && m.ws.readyState === WebSocket.OPEN && m.lastMsg > 0) {
-                if (now - m.lastMsg > 30000) { 
-                    log(id, `<span class="warn-msg">连接假死，正在强制拉起...</span>`);
-                    run(id, true);
-                }
-            }
-        });
-    }, 15000);
 
     function log(mId, msg) {
         const box = document.getElementById(`l-${mId}`);
         if(!box) return;
         const t = new Date().toLocaleTimeString([], {hour12:false});
         box.innerHTML = `<div>[${t}] ${msg}</div>` + box.innerHTML;
-        if (box.childNodes.length > 30) box.removeChild(box.lastChild);
+        if (box.childNodes.length > 50) box.removeChild(box.lastChild);
     }
 
     function save() {
@@ -264,16 +239,16 @@
                   t = document.getElementById(`t-${id}`), m = document.getElementById(`m-${id}`);
             if(s && v && t && m) data.push({ type: t.value, sym: s.value, thr: v.value, mode: m.value });
         });
-        localStorage.setItem('monitor_data_v8', JSON.stringify(data));
+        localStorage.setItem('monitor_data_v9', JSON.stringify(data));
     }
 
     window.onload = () => {
         try {
-            const vol = localStorage.getItem('global_v_v8') || 50;
+            const vol = localStorage.getItem('global_v_v9') || 50;
             document.getElementById('globalVol').value = vol;
             document.getElementById('volText').innerText = vol;
             volume = vol / 100;
-            const saved = JSON.parse(localStorage.getItem('monitor_data_v8'));
+            const saved = JSON.parse(localStorage.getItem('monitor_data_v9'));
             if (Array.isArray(saved) && saved.length > 0) {
                 saved.forEach(c => { if(c) addNewMonitor(c); });
             } else { addNewMonitor(); }
@@ -283,7 +258,7 @@
     document.getElementById('globalVol').oninput = function() {
         volume = this.value / 100;
         document.getElementById('volText').innerText = this.value;
-        localStorage.setItem('global_v_v8', this.value);
+        localStorage.setItem('global_v_v9', this.value);
     };
 </script>
 </body>
