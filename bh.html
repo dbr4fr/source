@@ -178,7 +178,7 @@
         clearTimeout(m.timer);
 
         const url = type === 'binance' ? 
-            `wss://fstream.binance.com/ws/${sym.toLowerCase()}@aggTrade` : 
+            `wss://fstream.binance.com/market/ws/${sym.toLowerCase()}@aggTrade` : 
             `wss://api.hyperliquid.xyz/ws`;
 
         try {
