@@ -428,7 +428,7 @@
             }
 
             const stream = `${symbol}@aggTrade`;
-            monitor.ws = new WebSocket(`wss://fstream.binance.com/ws/${stream}`);
+            monitor.ws = new WebSocket(`wss://fstream.binance.com/market/ws/${stream}`);
 
             monitor.ws.onopen = () => {
                 monitor.isMonitoring = true;
